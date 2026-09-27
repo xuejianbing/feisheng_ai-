@@ -20,6 +20,12 @@ import { rememberGame } from './playerMemory.js';  /* ★ 导入对手记忆函�
 import { learnFromGame } from './softMetrics.js';  /* ★ 导入软指标学习函数 */
 import { log } from './logger.js';  /* ★ 导入日志模块 */
 import { cfg } from './util.js';  /* ★ 读取配置（learningRate 等） */
+import { recompute as champRecompute, getChampions as champGet, championOf, getEmbedding as champEmbedding, applyChampionBoost, applyChampionRule, stats as champStats, clear as champClear } from './championStrategy.js';  /* ★ 逐决策点嵌入固定 */
+
+/* ★ 从当前样本缓冲读取并重算冠军（供 __DJSC.champion.recompute 无参调用） */
+function champRecomputeFromBuffer() {
+    try { return champRecompute(getSamples() || []); } catch (e) { return {}; }
+}
 
 /* ★ 自定义浮层提示（训练完成后才消失） */
 function showToast(msg, duration) {
@@ -177,8 +183,18 @@ function promoteCandidate() {
     _state = 'stable';
     _gamesSince = 0;
     saveState();
-    /* 提升后清空样本，开始新一轮收集 */
+    /* ★ 提升后清空样本，开始新一轮收集 */
     resetAll();
+    /* ★ 固化冠军策略：从已训练样本里按类型聚合最高价值决策，写入引擎默认偏好 */
+    try {
+        if (window.__DJSC.champion && window.__DJSC.champion.recompute) {
+            const ch = window.__DJSC.champion.recompute();
+            const _n = (typeof ch === 'object' && ch) ? Object.keys(ch).length : 0;
+            if (_n > 0) {
+                try { log.info('champion', '已固化 ' + _n + ' 类冠军决策写入引擎'); } catch (e) {}
+            }
+        }
+    } catch (e) {}
 }
 
 function discardCandidate() {
@@ -381,4 +397,18 @@ if (typeof window !== 'undefined') {
     window.__DJSC.getState = getState;
     window.__DJSC.getGamesSince = getGamesSince;
     window.__DJSC.recommend = recommend;  /* ★ 动态推荐：训练弹窗 & 模型状态面板共用 */
+    window.__DJSC.champion = {
+        recompute: function (samples) {
+            try {
+                return (samples && samples.length) ? champRecompute(samples) : champRecomputeFromBuffer();
+            } catch (e) { return {}; }
+        },
+        get: champGet,
+        of: championOf,
+        embedding: champEmbedding,      /* ★ 按 (action,id) 精确取某决策点嵌入条 */
+        applyRule: applyChampionRule,
+        applyBoost: applyChampionBoost,
+        stats: champStats,
+        clear: champClear,
+    };
 }

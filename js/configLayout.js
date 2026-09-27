@@ -15,7 +15,7 @@ export function arrangeConfig(source, lib, game) {
         ['tactics', '二、决策与战术', ['responseAI', 'compareAI', 'broadcastAI', 'enablePlanner', 'psychologyLayer', 'comboChain', 'deckAwareness', 'deckConsumeAllPlayers', 'openPlanPanel', 'openRecommendPanel']],
         ['override', '三、原生 AI 接管', ['hardOverride', 'override_use', 'override_respond', 'override_discard', 'override_compare', 'openOverridePanel']],
         ['memory', '四、记忆与反馈', ['decisionFeedback', 'skillFeedback', 'styleFeedback', 'crossGameMemory', 'playerMemory', 'openMemoryPanel']],
-        ['training', '五、模型与训练', ['useTrainedModel', 'aiStrength', 'useResidual', 'learningRate', 'forceTrain', 'showSampleCount', 'showModelStatus', 'autoFixModel']],
+        ['training', '五、模型与训练', ['useTrainedModel', 'aiStrength', 'championBoost', 'useResidual', 'learningRate', 'forceTrain', 'showSampleCount', 'showModelStatus', 'autoFixModel']],
         ['report', '六、战报与分析', ['showReport', 'archiveGames', 'showLog', 'persist', 'narrator', 'openPanel', 'openArchivePanel', 'openSkillPanel', 'openSkillBreakdownPanel', 'openFeedbackPanel', 'openReplayPanel', 'openComparePanel', 'openNarratorPanel', 'openSmartPanel']],
         ['data', '七、数据管理', ['exportTrainingData', 'importTrainingData', 'exportAllData', 'importOverwrite', 'importMerge', 'openExportPanel', 'quickExportAll', 'clearSamples']],
         ['diagnostics', '八、高级与诊断', ['openHotSwapPanel', 'openSharedPanel', 'openEvolutionPanel', 'openBrainDashboard', 'openDecisionDashboard', 'openCalibratorPanel', 'profiler', 'openProfilerPanel', 'openHealthPanel', 'openSelfCheck', 'openGuardPanel', 'openPostCheckPanel', 'openPsychologyMonitor', 'openComboMonitor', 'openMemoryMonitor', 'openAutoFeatureMonitor', 'openSoftMetricsMonitor', 'openPostCheckMonitor', 'openProfilerMonitor', 'openTrainBufferMonitor', 'openFullMonitor']],
@@ -61,6 +61,7 @@ export function arrangeConfig(source, lib, game) {
         // ===== 模型与训练 =====
         useTrainedModel: '启用训练好的神经网络模型，开启后AI会用学到的经验做决策。',
         aiStrength: 'AI强度档位：直接缩放模型对决策的影响力。选"弱/极弱"能明显降低AI正确率，打得菜一点；中为平衡；强/极强全力发挥。',
+        championBoost: '决策点嵌入替换：训练后把每个决策点(action+id)单独存为一条嵌入条（含130维特征逐元素平均），按TD价值保留每类前若干条写入引擎。运行中候选动作按(id精确命中)对应嵌入条，冲缩放价值提权/替换。R1启用→R2同类型→R3 id精确命中→R4模糊判定gap≤14→R5价值为正→R6提权=boost×(0.5+价值)→R7替换→R8兜底。0关闭，数字越大提权越强越易触发替换。',
         useResidual: '残差连接开关，开启后神经网络更深，学习能力更强，但更耗性能。',
         learningRate: '学习效率，数值越大学得越快但容易过拟合，数值越小学得越稳但慢。',
         forceTrain: '强制训练按钮，手动触发一次模型训练，把积累的样本学进去。',

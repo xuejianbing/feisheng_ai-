@@ -30,6 +30,9 @@ export function isScoreEngineEnabled() {
 export function installScoreEngine() {
 	if (_installed) return;
 
+	/* ★ 存储配额守护：先释放扩展占用的重键，避免 localStorage 耗尽导致主程序 QuotaExceededError */
+	try { safeStorageGuard(); } catch (e) {}
+
 	/* installHooks 是关键路径：失败则不置 _installed，允许下次重试
 	 * （原代码先置 true 再 try，任何异常都会被吞掉且永远无法恢复）
 	 */
@@ -252,3 +255,39 @@ export function uninstallScoreEngine() {
 }
 
 export { openScorePanel, bestAction, rulesDecide, scanReset };
+
+/* ================= 存储配额守护 =================
+ * 扩展把训练样本写进 localStorage（旧版）会撑爆 ~5MB 配额，
+ * 导致无名杀主程序自身 setItem 也抛 QuotaExceededError。
+ * 启动时先探测：若写入极小的探针都失败，说明配额已满，
+ * 则清理扩展占用最重的键，释放空间后再正常启动。
+ */
+function safeStorageGuard() {
+	try {
+		if (typeof localStorage === 'undefined') return;
+		/* 探针：若连一个超小值都写不进去 → 存储已满 */
+		try {
+			localStorage.setItem('djsc_probe', '1');
+			localStorage.removeItem('djsc_probe');
+			return;  /* 还有空间，不用清 */
+		} catch (e) {
+			/* 落到这里说明配额已满，逐个释放扩展的重键 */
+		}
+		var HEAVY_KEYS = [
+			'djsc_training_samples_v1',  /* 训练样本缓冲（最大元凶） */
+			'djsc_weights_v3',           /* 全量权重快照 */
+			'无名AI_archive',            /* 战报归档 */
+			'无名AI_playerMemory'        /* 玩家记忆 */
+		];
+		try { var removed = 0; } catch (e) {}
+		for (var i = 0; i < HEAVY_KEYS.length; i++) {
+			try {
+				localStorage.removeItem(HEAVY_KEYS[i]);
+				removed++;
+			} catch (e) {}
+		}
+		try {
+			console.warn('[无名AI] 本地存储已满，已清理扩展缓存键 ' + removed + ' 个以恢复主程序写入');
+		} catch (e) {}
+	} catch (e) {}
+}

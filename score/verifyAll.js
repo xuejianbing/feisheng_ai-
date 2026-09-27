@@ -133,6 +133,15 @@ export function verifyAll() {
     const wr = _safe(function () { return D.weightsReady ? D.weightsReady() : -1; });
     rec('模型', 'weightsReady', wr.ok, wr.ok ? String(wr.val) : '异常:' + wr.err);
 
+    /* 5.1 冠军策略固化能力 */
+    const champApi = (D.champion && typeof D.champion.get === 'function' && typeof D.champion.applyRule === 'function' && typeof D.champion.recompute === 'function');
+    let champInfo = 'API' + (champApi ? '就绪' : '缺失');
+    try {
+        const cs = D.champion.stats ? D.champion.stats() : null;
+        if (cs && cs.embeds) champInfo += (Object.keys(cs.embeds).length ? '｜已固化 ' + Object.keys(cs.embeds).length + ' 类' + ('/' + (cs.embs || 0) + ' 条嵌入') : '｜暂无固化嵌入');
+    } catch (e) {}
+    rec('数据', 'champion 冠军策略', champApi, champInfo);
+
     /* 生成报告 */
     const total = out.length;
     const lines = out.map(function (r) {

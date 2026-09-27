@@ -11,6 +11,7 @@
 
 const MAX_SAMPLES = 30000;  /* ★ 手机端极限：拉到3万样本 */
 const STORAGE_KEY = 'djsc_training_samples_v1';
+const STORAGE_SAFE_COUNT = 2500;  /* ★ localStorage 兜底安全上限：防 quota 爆满（≈1.5MB） */
 
 /* ★ IndexedDB 封装（替换 localStorage，支持3万+样本） */
 // 作者：飞升原创 | License: GPL-3.0
@@ -72,16 +73,33 @@ function getAllSamplesAsync() {
 /* ★ 启动时初始化 IndexedDB */
 initDB();
 
-/* ★ 从 localStorage 加载历史样本（兼容旧版） */
+/* ★ 从 IndexedDB 加载全部样本（优先），失败则回退 localStorage（兼容旧版）
+ * 注意：模块加载时 initDB 尚未完成，因此任何时候都发起一次异步 DB 读；读不到再回退 */
 function loadFromStorage() {
+    getSamplesAsyncFromDB().then(function (arr) {
+        if (Array.isArray(arr) && arr.length) {
+            BUFFER = arr;
+            _keyIndex.clear();
+            /* 内存索引在下次 push 时按需重建 */
+            console.log('[trainExport] ✅ 从 IndexedDB 加载了 ' + BUFFER.length + ' 条历史样本');
+            /* 释放旧的超大 localStorage 键，腾出存储配额 */
+            try { localStorage.removeItem(STORAGE_KEY); } catch (e) {}
+        } else {
+            _loadFromStorageFallback();
+        }
+    });
+}
+
+function _loadFromStorageFallback() {
     try {
         const raw = localStorage.getItem(STORAGE_KEY);
         if (raw) {
             const arr = JSON.parse(raw);
             if (Array.isArray(arr)) {
-                BUFFER = arr.slice(0, MAX_SAMPLES);
+                /* 兜底仅保留安全数量，防止 localStorage 溢出 */
+                BUFFER = arr.slice(0, STORAGE_SAFE_COUNT);
                 _keyIndex.clear();
-                console.log('[trainExport] ✅ 从本地加载了 ' + BUFFER.length + ' 条历史样本');
+                console.log('[trainExport] ✅ 从本地加载了 ' + BUFFER.length + ' 条历史样本（回退模式）');
             }
         }
     } catch (e) {
@@ -89,19 +107,91 @@ function loadFromStorage() {
     }
 }
 
-/* ★ 保存样本到 localStorage（防抖优化，避免频繁序列化卡顿） */
+/* ★ 从 IndexedDB 批量读取全部样本 */
+function getSamplesAsyncFromDB() {
+    return new Promise(function (resolve) {
+        try {
+            const req = indexedDB.open(DB_NAME, 1);
+            req.onsuccess = function (e) {
+                const db = e.target.result;
+                try {
+                    const tx = db.transaction(DB_STORE, 'readonly');
+                    const r = tx.objectStore(DB_STORE).getAll();
+                    r.onsuccess = function () { resolve(r.result || []); };
+                    r.onerror = function () { resolve([]); };
+                } catch (err) { resolve([]); }
+            };
+            req.onerror = function () { resolve([]); };
+        } catch (err) { resolve([]); }
+    });
+}
+
+/* ★ 保存样本：优先 IndexedDB（大数据承载，避免 localStorage 配额爆满），
+ * 不可用时回退 localStorage 并裁剪到安全数量，杜绝 QuotaExceededError 拖垮主程序。
+ * 防抖优化，避免频繁序列化卡顿 */
 let _saveTimer = null;
 function saveToStorage() {
     try {
         /* ★ 防抖：1秒内多次调用只保存一次 */
         if (_saveTimer) clearTimeout(_saveTimer);
-        _saveTimer = setTimeout(function() {
-            try {
-                localStorage.setItem(STORAGE_KEY, JSON.stringify(BUFFER));
-            } catch (e) {
-                console.warn('[trainExport] 保存样本失败：', e);
-            }
+        _saveTimer = setTimeout(function () {
+            _persistToDB();
+            _persistToLocalStorageFallback();
         }, 1000);
+    } catch (e) {
+        console.warn('[trainExport] 保存样本失败：', e);
+    }
+}
+
+/* ★ 主存储：整包写入 IndexedDB（重写 store，保持与 BUFFER 一致） */
+function _persistToDB() {
+    if (!_dbReady) return;
+    try {
+        const req = indexedDB.open(DB_NAME, 1);
+        req.onsuccess = function (e) {
+            const db = e.target.result;
+            try {
+                const tx = db.transaction(DB_STORE, 'readwrite');
+                const store = tx.objectStore(DB_STORE);
+                /* 先清空再写入，保证与内存 BUFFER 完全一致，避免脏数据累积 */
+                const clearReq = store.clear();
+                clearReq.onsuccess = function () {
+                    for (let i = 0; i < BUFFER.length; i += 500) {
+                        const slice = BUFFER.slice(i, i + 500);
+                        for (let k = 0; k < slice.length; k++) store.add(slice[k]);
+                    }
+                };
+            } catch (err) {
+                console.warn('[trainExport] IndexedDB 写入失败，尝试落 localStorage：', err);
+                _persistToLocalStorageFallback();
+            }
+        };
+        req.onerror = function () {
+            _persistToLocalStorageFallback();
+        };
+    } catch (e) {
+        console.warn('[trainExport] IndexedDB 不可用：', e);
+        _persistToLocalStorageFallback();
+    }
+}
+
+/* ★ 兜底存储：仅存安全数量到 localStorage，且失败时裁剪重试，绝不抛错 */
+function _persistToLocalStorageFallback() {
+    try {
+        let data = BUFFER.length > STORAGE_SAFE_COUNT ? BUFFER.slice(-STORAGE_SAFE_COUNT) : BUFFER;
+        try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+        } catch (e) {
+            /* 配额仍满 → 进一步裁剪后重试一次 */
+            try {
+                const half = Math.floor(data.length / 2);
+                if (half > 0) {
+                    localStorage.setItem(STORAGE_KEY, JSON.stringify(data.slice(-half)));
+                }
+            } catch (e2) {
+                try { localStorage.removeItem(STORAGE_KEY); } catch (e3) {}
+            }
+        }
     } catch (e) {
         console.warn('[trainExport] 保存样本失败：', e);
     }

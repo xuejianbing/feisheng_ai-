@@ -29,7 +29,7 @@ import { changelog } from './changelog.js';
  import { nei } from './nei.js';
 export let config = {
 	/* ===== 主标题 ===== */
-	djscBd: { clear: true, name: '<hr aria-hidden="true"><div style="color: #00FFB0; text-align:center; font-size: 16px; padding: 10px;">📊 决策积分引擎 v4.56.0</div>' },
+	djscBd: { clear: true, name: '<hr aria-hidden="true"><div style="color: #00FFB0; text-align:center; font-size: 16px; padding: 10px;">📊 决策积分引擎 v4.56.3</div>' },
 
 	/* ===== 🎛️ 功能面板按钮（大按钮） ===== */
 	panelBd: { clear: true, name: '<hr aria-hidden="true"><div class="djsc-config-section-title">功能面板（点击打开）</div>' },
@@ -634,6 +634,18 @@ export let config = {
 				'0.008': '0.008（很快）',
 				'0.009': '0.009（非常快）',
 				'0.010': '0.010（极快最快）',
+			},
+		},
+
+		championBoost: {
+			name: '🏆 冠军策略（写入引擎的同类型最高分决策提权）',
+			init: '0',
+			intro: '训练完成后，从样本里按决策类型聚合，挑出每类价值最高的冠军决策，固化为默认策略写入引擎。此项设置命中冠军动作的加分强度：0=关闭、3=轻微、6=明显、10=强执。既能把样本训练出的最高分决策固化长期优先，又可通过归零随时关闭。需要在模型提升后才会自动固化一次。',
+			item: {
+				'0': '0（关闭冠军策略提权）',
+				'3': '3（轻微：冠军动作略优先）',
+				'6': '6（明显：冠军动作明显优先）',
+				'10': '10（强：倾向固化的最高分决策）',
 			},
 		},
 

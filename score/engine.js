@@ -62,6 +62,7 @@ import { showReport, resetReportShown } from './report.js';
 import { resetDecisionFeedback } from './decisionFeedback.js';
 import { recordGameEnd as banditRecordGameEnd } from './bandit.js';
 import { onGameEnd as modelStateOnGameEnd, recordABScore } from './modelState.js';
+import { applyChampionRule, applyChampionBoost, getChampions as champGet, championOf as champOf, recompute as champRecompute, stats as champStats } from './championStrategy.js';  /* ★ 冠军策略固化 */
 
 /* ★ 立刻挂载 scan，不用等 setTimeout */
 window.__DJSC = window.__DJSC || {};
@@ -2925,6 +2926,19 @@ function bestAction() {
 							}
 						} catch (e) {}
 					}
+					/* ★ 冠军策略固化：替换规则链 —— 命中样本训练出的同类型最高价值决策则提权并可能替换。
+					 * 规则摘要（详见 championStrategy.applyChampionRule）：R1启用→R2同类型→R3候选命中→
+					 * R4模糊判定→R5价值为正→R6提权→R7替换→R8兜底 */
+					try {
+						const champBoost = Number(cfg('championBoost', 0)) || 0;
+						if (champBoost > 0 && typeof applyChampionRule === 'function') {
+							const cr = applyChampionRule(acts, best, champBoost, { gapLimit: 14 });
+							if (cr && cr.replaced && cr.best && cr.best !== best) {
+								best = cr.best;
+								best.reason = (best.reason || '') + '｜冠军:' + (cr.hit || 0) + '条';
+							}
+						}
+					} catch (eChamp) {}
 					try {
 						if (window.__DJSC.conflict && window.__DJSC.conflict.detect) {
 							window.__DJSC.conflict.detect(best, modelConf, metaMod, { type: best.type, id: best.id, target: best.target });
